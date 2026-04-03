@@ -17,6 +17,10 @@ SERVICE_DIR = Path.home() / ".gemini-service"
 PROFILE_DIR = SERVICE_DIR / "chrome-profile"
 LOGIN_FLAG = SERVICE_DIR / "logged-in"
 
+# Keep-alive configuration
+KEEP_ALIVE_INTERVAL = 15 * 60   # 15 minutes - good balance (not too aggressive)
+KEEP_ALIVE_TASK = None
+
 # Global state
 context: BrowserContext = None
 playwright_instance = None
@@ -101,7 +105,7 @@ async def init_browser():
     context = await playwright_instance.chromium.launch_persistent_context(
         user_data_dir=str(PROFILE_DIR),
         headless=False,
-        channel="chrome",
+        channel="chromium",
         args=[
             "--disable-blink-features=AutomationControlled",
             "--disable-extensions",
@@ -142,6 +146,38 @@ async def init_browser():
     print("✅ Service ready!")
     print("🎯 API: http://localhost:8080/v1/chat/completions\n")
 
+async def keep_alive_task():
+    """Background task to prevent session expiration by lightly touching Gemini page"""
+    global context
+    print("🔄 Keep-alive task started (touches Gemini every ~18 min)")
+
+    while True:
+        await asyncio.sleep(KEEP_ALIVE_INTERVAL)
+        
+        if not context or not is_ready:
+            continue
+            
+        try:
+            # Create a temporary page (safe, doesn't interfere with user sessions)
+            page = await context.new_page()
+            await page.goto("https://gemini.google.com/app", 
+                          wait_until="domcontentloaded", 
+                          timeout=15000)
+            
+            await asyncio.sleep(4)  # Let page settle a bit
+            
+            # Light activity to simulate real user (harmless)
+            await page.evaluate("window.scrollBy(0, 200)")
+            await asyncio.sleep(1)
+            await page.evaluate("window.scrollBy(0, -150)")
+            
+            await page.close()
+            
+            print(f"✅ Keep-alive: Refreshed Gemini session at {time.strftime('%H:%M:%S')}")
+            
+        except Exception as e:
+            print(f"⚠️ Keep-alive warning (non-critical): {str(e)[:100]}...")
+            # Don't crash the task if one attempt fails
 
 async def get_or_create_session_page(session_id: str, start_new_chat: bool = False) -> Page:
     global session_pages, page_locks
@@ -867,21 +903,55 @@ async def list_sessions():
 @app.on_event("startup")
 async def startup():
     print("\n" + "="*50)
-    print("  00BX GEMINI API SERVICE")
-    print("  OpenAI-Compatible API for Gemini Web")
+    print(" 00BX GEMINI API SERVICE")
+    print(" OpenAI-Compatible API for Gemini Web")
     print("="*50)
     await init_browser()
+    
+    # Start keep-alive task AFTER browser is ready
+    global KEEP_ALIVE_TASK
+    if KEEP_ALIVE_TASK is None:
+        KEEP_ALIVE_TASK = asyncio.create_task(keep_alive_task())
+        print("🔄 Background keep-alive enabled")
 
-
+# @app.on_event("shutdown")
+# async def shutdown():
+#     global context, playwright_instance
+#     for page in session_pages.values():
+#         try:
+#             await page.close()
+#         except:
+#             pass
+#     if context:
+#         await context.close()
+#     if playwright_instance:
+#         await playwright_instance.stop()
 @app.on_event("shutdown")
 async def shutdown():
-    global context, playwright_instance
-    for page in session_pages.values():
+    global context, playwright_instance, KEEP_ALIVE_TASK
+    
+    print("🛑 Shutting down...")
+    
+    # Cancel keep-alive task
+    if KEEP_ALIVE_TASK and not KEEP_ALIVE_TASK.done():
+        KEEP_ALIVE_TASK.cancel()
+        try:
+            await KEEP_ALIVE_TASK
+        except asyncio.CancelledError:
+            pass
+    
+    # Close existing session pages
+    for page in list(session_pages.values()):
         try:
             await page.close()
         except:
             pass
+    session_pages.clear()
+    page_locks.clear()
+    
     if context:
         await context.close()
     if playwright_instance:
         await playwright_instance.stop()
+    
+    print("✅ Shutdown complete")
