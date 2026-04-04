@@ -158,7 +158,7 @@ async def init_browser():
 async def keep_alive_task():
     """Background task to prevent session expiration by lightly touching Gemini page"""
     global context
-    print("🔄 Keep-alive task started (touches Gemini every ~18 min)")
+    print("🔄 Keep-alive task started (touches Gemini every ~15 min)")
 
     while True:
         await asyncio.sleep(KEEP_ALIVE_INTERVAL)
