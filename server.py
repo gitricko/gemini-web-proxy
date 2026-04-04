@@ -124,9 +124,9 @@ async def init_browser():
     await page.goto("https://gemini.google.com/app")
     
     if first_time:
-        sign_in_button = page.get_by_role("link", name="Sign in")
-        await sign_in_button.wait_for(state="visible", timeout=10000)
-        await sign_in_button.click()        
+        # sign_in_button = page.get_by_role("link", name="Sign in")
+        # await sign_in_button.wait_for(state="visible", timeout=10000)
+        # await sign_in_button.click()        
         print("📌 Browser opened - please log into your Google account")
         print("   Waiting for login...\n")
         
