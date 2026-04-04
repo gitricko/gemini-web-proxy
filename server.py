@@ -75,10 +75,17 @@ def get_content_text(content: Any) -> str:
     return ""
 
 async def check_logged_in(page: Page) -> bool:
+    # This does not work becos google now give some queries for free without sigin. Maybe be good for those who wants to try a few APIs
     try:
         await asyncio.sleep(3)
         input_field = await page.query_selector('rich-textarea')
-        return input_field is not None
+        sign_in_button = page.locator('a[aria-label="Sign in"]')
+        count = sign_in_button.count()          # Fast, no waiting
+
+        if input_field is not None and count == 0:
+            return True
+        else:
+            return False
     except:
         return False
 
