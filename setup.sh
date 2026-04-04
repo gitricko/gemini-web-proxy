@@ -4,17 +4,27 @@ echo "Setting up Gemini Web Proxy for OpenCode..."
 echo "=========================================="
 
 # Check Python version
-python_version=$(python3 --version 2>&1 | grep -o '[0-9]\+\.[0-9]\+')
-if [[ $(echo "$python_version >= 3.8" | bc -l) -eq 0 ]]; then
+python_version=$(python --version 2>&1 | grep -oE '[0-9]+\.[0-9]+')
+
+# Split into major and minor
+IFS='.' read -r major minor <<< "$python_version"
+
+if (( major < 3 || (major == 3 && minor < 8) )); then
     echo "Error: Python 3.8 or higher is required"
     exit 1
 fi
 
 echo "✓ Python version check passed"
 
+# Create and activate virtual environment
+python -m venv .venv
+source .venv/bin/activate
+
+echo "✓ Virtual environment created and activated"
+
 # Install Python dependencies
 echo "Installing Python dependencies..."
-pip3 install -r requirements.txt
+pip install -r requirements.txt
 
 # Install Playwright browsers
 echo "Installing Playwright browsers..."
