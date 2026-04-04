@@ -79,10 +79,9 @@ async def check_logged_in(page: Page) -> bool:
     try:
         await asyncio.sleep(3)
         input_field = await page.query_selector('rich-textarea')
-        sign_in_button = page.locator('a[aria-label="Sign in"]')
-        count = sign_in_button.count()          # Fast, no waiting
+        account_button = await page.query_selector('a[aria-label^="Google Account:"]')
 
-        if input_field is not None and count == 0:
+        if input_field is not None and account_button is not None:
             return True
         else:
             return False
