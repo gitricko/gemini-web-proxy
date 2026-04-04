@@ -19,7 +19,7 @@ LOGIN_FLAG = SERVICE_DIR / "logged-in"
 
 # Keep-alive configuration
 KEEP_ALIVE_INTERVAL = 15 * 60   # 15 minutes - good balance (not too aggressive)
-KEEP_ALIVE_TASK = None
+KEEP_ALIVE_TASK: Optional[asyncio.Task] = None
 
 # Global state
 context: BrowserContext = None
@@ -935,8 +935,8 @@ async def startup():
 #         await context.close()
 #     if playwright_instance:
 #         await playwright_instance.stop()
-@app.on_event("shutdown")
-async def shutdown():
+@app.on_event("shutdown-old")
+async def shutdown_old():
     global context, playwright_instance, KEEP_ALIVE_TASK
     
     print("🛑 Shutting down...")
@@ -963,4 +963,54 @@ async def shutdown():
     if playwright_instance:
         await playwright_instance.stop()
     
+    print("✅ Shutdown complete")
+
+@app.on_event("shutdown")
+async def shutdown():
+    global context, playwright_instance, KEEP_ALIVE_TASK
+    
+    print("🛑 Shutting down...")
+
+    # 1. Cancel the keep-alive task safely
+    if KEEP_ALIVE_TASK and not KEEP_ALIVE_TASK.done():
+        KEEP_ALIVE_TASK.cancel()
+        try:
+            await asyncio.wait_for(KEEP_ALIVE_TASK, timeout=2.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass
+        except Exception as e:
+            print(f"Keep-alive task cleanup warning: {e}")
+
+    # 2. Close all active session pages
+    for session_id, page in list(session_pages.items()):
+        try:
+            await page.close()
+        except Exception:
+            pass  # Ignore errors during shutdown
+    session_pages.clear()
+    page_locks.clear()
+
+    # 3. Close the browser context with protection
+    if context:
+        try:
+            # Short timeout to prevent hanging
+            await asyncio.wait_for(context.close(), timeout=8.0)
+            print("✅ Browser context closed")
+        except asyncio.TimeoutError:
+            print("⚠️ Browser context close timed out (normal during force shutdown)")
+        except Exception as e:
+            # This catches the exact "Connection closed while reading from the driver" error
+            if "Connection closed while reading from the driver" in str(e):
+                print("⚠️ Playwright driver already closing (expected on Ctrl+C)")
+            else:
+                print(f"⚠️ Context close warning: {str(e)[:120]}")
+
+    # 4. Stop playwright instance
+    if playwright_instance:
+        try:
+            await asyncio.wait_for(playwright_instance.stop(), timeout=5.0)
+            print("✅ Playwright stopped")
+        except (asyncio.TimeoutError, Exception):
+            print("⚠️ Playwright stop had issues (common on forced shutdown)")
+
     print("✅ Shutdown complete")
