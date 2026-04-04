@@ -935,7 +935,8 @@ async def startup():
 #         await context.close()
 #     if playwright_instance:
 #         await playwright_instance.stop()
-@app.on_event("shutdown-old")
+
+# @app.on_event("shutdown-old")
 async def shutdown_old():
     global context, playwright_instance, KEEP_ALIVE_TASK
     
