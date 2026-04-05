@@ -4,8 +4,8 @@ VOLUME_NAME=webtop-config
 .PHONY: backup restore clean
 
 start:
-	PUID=$(shell id -u) \
-	PGID=$(shell id -g) \
+	DOCKER_PUID=$(shell id -u) \
+	DOCKER_PGID=$(shell id -g) \
 	docker compose up -d
 	docker compose logs -f
 
@@ -13,7 +13,7 @@ stop:
 	docker compose down
 
 docker-image-clean:
-	# docker rm -f $$(docker ps -qa)
+	docker stop $(DOCKER_NAME)
 	docker rm -f $(DOCKER_NAME)
 
 docker-vol-clean:
